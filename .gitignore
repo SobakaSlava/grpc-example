@@ -1,3 +1,4 @@
 .idea
 node_modules
-server/credentials.json
+src/server/credentials.json
+dist
