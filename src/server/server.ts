@@ -1,10 +1,11 @@
 import path from 'path';
-import grpc, { ServerUnaryCall } from '@grpc/grpc-js';
+import * as grpc from '@grpc/grpc-js';
 import { loadSync } from '@grpc/proto-loader';
 import admin from 'firebase-admin';
 import { ServiceClientConstructor } from '@grpc/grpc-js/build/src/make-client';
-import { sendUnaryData } from "@grpc/grpc-js/src/server-call";
-import {firestore} from "firebase-admin/lib/firestore";
+import { firestore } from 'firebase-admin/lib/firestore';
+import { promisify } from 'util';
+
 import CollectionReference = firestore.CollectionReference;
 
 type Id = {
@@ -20,36 +21,43 @@ type UserData = {
 type User = UserData & Id
 
 admin.initializeApp({
-  credential: admin.credential.cert('./credentials.json')
+  credential: admin.credential.cert(path.resolve(__dirname, './credentials.json')),
 });
 
 const db = admin.firestore();
 const usersCollection = db.collection('users') as CollectionReference<UserData>;
 
-const PROTO_PATH = path.resolve(__dirname, '../users.proto');
+const PROTO_PATH = path.resolve(__dirname, '../../proto/users.proto');
 
 const packageDefinition = loadSync(PROTO_PATH, {
   keepCase: true,
   longs: String,
   enums: String,
-  arrays: true
+  arrays: true,
 });
 
 const usersProto = grpc.loadPackageDefinition(packageDefinition);
 const server = new grpc.Server();
+const promisifiedBind = promisify(server.bindAsync).bind(server);
 
 server.addService((usersProto.UserService as ServiceClientConstructor).service, {
-  getAll: async (_: ServerUnaryCall<any, User[]>, callback: sendUnaryData<User[]>) => {
+  getAll: async (
+    _: grpc.ServerUnaryCall<unknown, { users: User[] }>,
+    callback: grpc.sendUnaryData<{ users: User[] }>,
+  ) => {
     const snapshot = await usersCollection.get();
-    const users = snapshot.docs.map(doc => ({
+    const users = snapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data()
+      ...doc.data(),
     }));
 
-    callback(null, users);
+    callback(null, { users });
   },
 
-  get: async (call: ServerUnaryCall<Id, User>, callback: sendUnaryData<User>) => {
+  get: async (
+    call: grpc.ServerUnaryCall<Id, User>,
+    callback: grpc.sendUnaryData<User>,
+  ) => {
     const userDoc = await usersCollection.doc(call.request.id).get();
     const userData = userDoc.data();
 
@@ -66,7 +74,10 @@ server.addService((usersProto.UserService as ServiceClientConstructor).service, 
     }
   },
 
-  insert: async (call: ServerUnaryCall<UserData, User>, callback: sendUnaryData<User>) => {
+  insert: async (
+    call: grpc.ServerUnaryCall<UserData, User>,
+    callback: grpc.sendUnaryData<User>,
+  ) => {
     const userReference = await usersCollection.add(call.request);
     const user = await userReference.get();
     const userData = user.data();
@@ -75,11 +86,14 @@ server.addService((usersProto.UserService as ServiceClientConstructor).service, 
       callback(null, {
         id: user.id,
         ...userData,
-      })
+      });
     }
   },
 
-  update: async (call: ServerUnaryCall<User, User>, callback: sendUnaryData<User>) => {
+  update: async (
+    call: grpc.ServerUnaryCall<User, User>,
+    callback: grpc.sendUnaryData<User>,
+  ) => {
     await usersCollection.doc(call.request.id).update(call.request);
     const userDoc = await usersCollection.doc(call.request.id).get();
     const userData = userDoc.data();
@@ -92,17 +106,24 @@ server.addService((usersProto.UserService as ServiceClientConstructor).service, 
     } else {
       callback({
         code: grpc.status.NOT_FOUND,
-        details: 'Not found'
+        details: 'Not found',
       });
     }
   },
 
-  remove: async (call: ServerUnaryCall<Id, {}>, callback: sendUnaryData<{}>) => {
-    await usersCollection.doc(call.request.id).delete()
+  remove: async (
+    call: grpc.ServerUnaryCall<Id, Record<string, never>>,
+    callback: grpc.sendUnaryData<Record<string, never>>,
+  ) => {
+    await usersCollection.doc(call.request.id).delete();
     callback(null, {});
   },
 });
 
-server.bind('127.0.0.1:30043', grpc.ServerCredentials.createInsecure());
-console.log('Server running at http://127.0.0.1:30043');
-server.start()
+async function main() {
+  await promisifiedBind('127.0.0.1:30043', grpc.ServerCredentials.createInsecure());
+  console.log('Server running at http://127.0.0.1:30043');
+  server.start();
+}
+
+main();

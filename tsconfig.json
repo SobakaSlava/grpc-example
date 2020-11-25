@@ -1,7 +1,7 @@
 {
   "extends": "@tsconfig/node14/tsconfig.json",
   "compilerOptions": {
-    "module": "ESNext",
+    "module": "commonjs",
     "moduleResolution": "Node",
     "outDir": "dist",
     "preserveConstEnums": true,
@@ -9,6 +9,6 @@
     "esModuleInterop": true
   },
 
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/**/*.json", "src/*.proto"],
   "exclude": ["node_modules"]
 }

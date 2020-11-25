@@ -1,22 +1,32 @@
-const path = require('path');
-const grpc = require("grpc");
-const protoLoader = require("@grpc/proto-loader");
-const grpc_promise = require('grpc-promise');
+import path from 'path';
+import * as grpc from '@grpc/grpc-js';
+import { loadSync } from '@grpc/proto-loader';
+import { ServiceClientConstructor } from '@grpc/grpc-js/build/src/make-client';
+import { promisify } from 'util';
 
-const PROTO_PATH = path.resolve(__dirname, '../users.proto');
+const PROTO_PATH = path.resolve(__dirname, '../../proto/users.proto');
 
-const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
+const packageDefinition = loadSync(PROTO_PATH, {
   keepCase: true,
   longs: String,
   enums: String,
-  arrays: true
+  arrays: true,
 });
 
-const { UserService } = grpc.loadPackageDefinition(packageDefinition);
+const { UserService } : { UserService?: ServiceClientConstructor } = grpc
+  .loadPackageDefinition(packageDefinition);
+
+if (!UserService) {
+  throw new Error('ServiceClientConstructor is missing');
+}
+
 const client = new UserService(
-  "localhost:30043",
-  grpc.credentials.createInsecure()
+  'localhost:30043',
+  grpc.credentials.createInsecure(),
 );
-grpc_promise.promisifyAll(client);
+
+Object.keys(Object.getPrototypeOf(client)).forEach((functionName) => {
+  client[functionName] = promisify(client[functionName]);
+});
 
 export default client;
