@@ -1,5 +1,1 @@
-<<<<<<< HEAD
-fewfgwertgrwqwerew
-=======
-fewf
->>>>>>> very cool task
+fixed this file 
